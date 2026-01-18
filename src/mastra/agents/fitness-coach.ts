@@ -1,6 +1,4 @@
 // =============================================================================
-// TODO: Create the Fitness Coach Agent
-// =============================================================================
 //
 // This file defines your AI fitness coach - its personality, knowledge, and behavior.
 // The agent is the "brain" that processes user messages and generates responses.
