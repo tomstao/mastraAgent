@@ -1,5 +1,4 @@
 // =============================================================================
-// TODO: Export Your Agents
 // =============================================================================
 //
 // This is a barrel file that re-exports all agents from this folder.
@@ -31,3 +30,5 @@
 //   export { yogaInstructor } from './yoga-instructor';
 //
 // =============================================================================
+
+export { fitnessCoach } from './fitness-coach';
