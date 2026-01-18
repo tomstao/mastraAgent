@@ -159,6 +159,7 @@
 //
 // =============================================================================
 import { Agent } from '@mastra/core/agent';
+import { calculateBmiTool } from '@/mastra/tools';
 
 export const fitnessCoach = new Agent({
   name: 'fitness coach',
@@ -193,4 +194,7 @@ export const fitnessCoach = new Agent({
     '\n' +
     'Encouragement: End every session with a motivational "Closing Statement."',
   model: 'openai/gpt-4o-mini',
+  tools: {
+    calculateBmiTool: calculateBmiTool,
+  },
 });
