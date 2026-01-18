@@ -29,3 +29,5 @@
 //       return { bmi, category: '...' };
 //     },
 //   });
+
+export { calculateBmiTool } from './calculate-bmi';
