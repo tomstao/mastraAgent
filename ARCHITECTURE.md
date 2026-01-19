@@ -14,6 +14,12 @@ A comprehensive guide on how this AI-powered fitness coach chatbot was built usi
 6. [Environment Setup](#environment-setup)
 7. [Commands](#commands)
 8. [Key Concepts](#key-concepts)
+9. [SDK Responsibilities](#sdk-responsibilities)
+10. [Alternatives to Vercel AI SDK](#alternatives-to-vercel-ai-sdk)
+11. [How Message Rendering Works](#how-message-rendering-works)
+12. [Testing](#testing)
+13. [Future Enhancements](#future-enhancements)
+14. [Resources](#resources)
 
 ---
 
@@ -517,6 +523,205 @@ e:{"finishReason":"stop"}  ← Finish event
 | `0:`   | Text delta (content) |
 | `e:`   | Finish event         |
 | `d:`   | Data event           |
+
+---
+
+## SDK Responsibilities
+
+This project uses **both** Mastra and Vercel AI SDK. Here's what each handles:
+
+### Mastra Packages (Backend)
+
+| Package          | Purpose                                        |
+| ---------------- | ---------------------------------------------- |
+| `@mastra/core`   | Agent creation, Tool creation, Mastra instance |
+| `@mastra/ai-sdk` | Integration helpers (installed, optional)      |
+
+### Vercel AI SDK Packages (Frontend)
+
+| Package          | Purpose                                       |
+| ---------------- | --------------------------------------------- |
+| `@ai-sdk/react`  | `useChat` hook for chat state management      |
+| `@ai-sdk/openai` | OpenAI provider (optional with magic strings) |
+
+### Layer Responsibility
+
+| Layer    | SDK Used                        | Purpose                                                |
+| -------- | ------------------------------- | ------------------------------------------------------ |
+| Frontend | Vercel AI SDK (`@ai-sdk/react`) | `useChat` manages state, sends requests, parses stream |
+| Backend  | Mastra (`@mastra/core`)         | Agent definition, tool execution, LLM calls            |
+| Protocol | AI SDK Data Stream              | `0:` and `e:` prefixes that `useChat` expects          |
+
+---
+
+## Alternatives to Vercel AI SDK
+
+Mastra can work alone without `@ai-sdk/react`. Here are two alternatives:
+
+### Option 1: Mastra's Built-in Playground
+
+Mastra includes a dev server with a chat UI. No custom frontend needed:
+
+```bash
+# Add to package.json scripts
+"mastra:dev": "mastra dev"
+
+# Run it
+bun run mastra:dev
+```
+
+This launches a playground at `http://localhost:4111` where you can chat with your agent directly.
+
+### Option 2: Plain React (no useChat)
+
+Replace `useChat` with regular React state:
+
+```typescript
+'use client';
+import { useState } from 'react';
+
+export function ChatInterface() {
+  const [messages, setMessages] = useState([]);
+  const [input, setInput] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    if (!input.trim()) return;
+
+    const userMessage = { role: 'user', content: input };
+    setMessages(prev => [...prev, userMessage]);
+    setInput('');
+    setIsLoading(true);
+
+    const res = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages: [...messages, userMessage] }),
+    });
+
+    const text = await res.text();
+    // Parse the data stream format (0:"content"\n)
+    const content = JSON.parse(text.split('\n')[0].slice(2));
+
+    setMessages(prev => [...prev, { role: 'assistant', content }]);
+    setIsLoading(false);
+  }
+
+  return (/* same JSX */);
+}
+```
+
+### Comparison
+
+| Approach          | Pros                             | Cons                                    |
+| ----------------- | -------------------------------- | --------------------------------------- |
+| Mastra Playground | Zero frontend code               | Less customizable UI                    |
+| Plain React       | No extra dependencies            | More boilerplate, manual stream parsing |
+| useChat (current) | Clean API, auto state management | Extra dependency                        |
+
+The `useChat` hook saves ~30 lines of boilerplate code.
+
+---
+
+## How Message Rendering Works
+
+### Separation of Concerns
+
+`useChat` handles **state management**, not rendering. Your components handle rendering.
+
+**What `useChat` provides:**
+
+```typescript
+const { messages, input, handleInputChange, handleSubmit, isLoading } = useChat({
+  api: '/api/chat',
+});
+```
+
+**What you render:**
+
+```typescript
+{messages.map((message) => (
+  <MessageBubble key={message.id} role={message.role} content={message.content} />
+))}
+```
+
+### How Re-rendering Works
+
+`useChat` is a custom hook that uses `useState` internally. When the API response arrives, it triggers a re-render:
+
+```
+API response arrives
+       │
+       ▼
+useChat parses the response
+       │
+       ▼
+useChat calls setMessages([...prev, newMessage])
+       │
+       ▼
+React re-renders ChatInterface
+       │
+       ▼
+messages.map() outputs new MessageBubble
+```
+
+### Inside useChat (Simplified)
+
+```typescript
+function useChat({ api }) {
+  // Internal state - just like your own useState
+  const [messages, setMessages] = useState([]);
+  const [input, setInput] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+
+    // 1. Add user message to state
+    const userMsg = { id: crypto.randomUUID(), role: 'user', content: input };
+    setMessages((prev) => [...prev, userMsg]); // ← triggers re-render
+    setInput('');
+    setIsLoading(true);
+
+    // 2. Call your API
+    const res = await fetch(api, {
+      method: 'POST',
+      body: JSON.stringify({ messages: [...messages, userMsg] }),
+    });
+
+    // 3. Parse response
+    const text = await res.text();
+    const content = parseDataStream(text);
+
+    // 4. Add assistant message to state
+    const assistantMsg = { id: crypto.randomUUID(), role: 'assistant', content };
+    setMessages((prev) => [...prev, assistantMsg]); // ← triggers re-render
+    setIsLoading(false);
+  }
+
+  return { messages, input, handleInputChange, handleSubmit, isLoading };
+}
+```
+
+### Visual Timeline
+
+```
+Time    messages array                          UI shows
+────────────────────────────────────────────────────────────────
+t=0     []                                      (empty)
+
+t=1     [{ user: "Hi" }]                        User bubble
+        ↑ setMessages called
+
+t=2     (waiting for API...)                    User bubble + loading
+
+t=3     [{ user: "Hi" },                        User bubble +
+         { assistant: "Hello!" }]               Assistant bubble
+        ↑ setMessages called again
+```
+
+Every `setMessages()` call tells React: "state changed, re-run the component function."
 
 ---
 
