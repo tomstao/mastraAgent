@@ -133,3 +133,11 @@
 // 3. Run the dev server and test!
 //
 // =============================================================================
+import { Mastra } from '@mastra/core';
+import { fitnessCoach } from '@/mastra/agents';
+
+export const mastra = new Mastra({
+  agents: {
+    fitnessCoach: fitnessCoach,
+  },
+});

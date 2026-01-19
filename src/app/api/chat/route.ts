@@ -124,3 +124,17 @@
 //   → Verify the model is correctly configured (e.g., openai('gpt-4o-mini'))
 //
 // =============================================================================
+import { mastra } from '@/mastra';
+
+export async function POST(req: Request) {
+  const { messages } = await req.json();
+
+  // Get the fitness coach agent from Mastra
+  const agent = mastra.getAgent('fitnessCoach');
+
+  // Stream the response
+  const stream = await agent.stream(messages);
+
+  // Convert to AI SDK v5 format for useChat hook
+  return stream.aisdk.v5.toUIMessageStreamResponse();
+}
