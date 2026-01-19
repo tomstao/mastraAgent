@@ -132,9 +132,32 @@ export async function POST(req: Request) {
   // Get the fitness coach agent from Mastra
   const agent = mastra.getAgent('fitnessCoach');
 
-  // Stream the response
-  const stream = await agent.stream(messages);
+  // Use non-streaming generate to test if agent works
+  const result = await agent.generate(messages);
 
-  // Convert to AI SDK v5 format for useChat hook
-  return stream.aisdk.v5.toUIMessageStreamResponse();
+  // Get the text from the result
+  const text = result.text;
+
+  // Create a simple streaming response that sends text in chunks
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream({
+    start(controller) {
+      // Send text as a single chunk
+      controller.enqueue(encoder.encode(`0:${JSON.stringify(text)}\n`));
+
+      // Send finish event
+      controller.enqueue(
+        encoder.encode(
+          `e:{"finishReason":"stop","usage":{"promptTokens":0,"completionTokens":0}}\n`
+        )
+      );
+      controller.close();
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'text/plain; charset=utf-8',
+    },
+  });
 }
